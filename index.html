@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>🐾 Cannoli Pro History</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+    <style>
+        body { background: #060d14; color: white; font-family: sans-serif; padding: 20px; }
+        .chart-container { background: #0b141d; padding: 20px; border-radius: 15px; border: 1px solid #1c3d5a; height: 70vh; }
+        header { margin-bottom: 20px; border-bottom: 2px solid #00d2ff; padding-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🐾 CANNOLI PRO: 1-Year History</h1>
+        <p>Station: KCOARVAD722 | Data source: Xweather Archive</p>
+    </header>
+
+    <div class="chart-container">
+        <canvas id="historyChart"></canvas>
+    </div>
+
+    <script>
+        async function loadHistory() {
+            // This fetches the file you created in Step 4
+            const response = await fetch('./weather_history.json');
+            const data = await response.json();
+
+            // Xweather stores time as 'timestamp' and values inside 'ob'
+            const labels = data.map(entry => entry.timestamp * 1000); // Convert to milliseconds
+            const temps = data.map(entry => entry.ob.tempF);
+
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperature (°F)',
+                        data: temps,
+                        borderColor: '#00d2ff',
+                        borderWidth: 1,
+                        pointRadius: 0, // Hides dots for a cleaner look with 100k points
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { 
+                            type: 'time',
+                            time: { unit: 'month' },
+                            grid: { color: '#1c3d5a' }
+                        },
+                        y: { grid: { color: '#1c3d5a' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: 'white' } }
+                    }
+                }
+            });
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

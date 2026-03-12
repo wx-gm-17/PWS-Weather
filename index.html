@@ -14,15 +14,14 @@
 :root { --bg: #060d14; --card: rgba(18, 32, 47, 0.95); --accent: #00d2ff; --border: rgba(255, 255, 255, 0.15); --text: #fff; }
 body { margin:0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow-x: hidden; }
 header { background: #0b141d; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
-#status-tag { font-size: 11px; color: #8899a6; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+#status-tag { font-size: 11px; color: #8899a6; font-weight: 700; text-transform: uppercase; }
 .controls { background: #0b141d; padding: 10px 25px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); overflow-x: auto; align-items: center; }
 .btn { background: var(--accent); border: none; padding: 10px 15px; border-radius: 8px; font-weight: 900; cursor: pointer; color: #000; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
 .btn-filter { background: #1c3d5a; color: white; opacity: 0.6; }
 .btn-filter.active { background: var(--accent); color: #000; opacity: 1; }
 .btn-csv { background: #2ecc71; margin-left: auto; }
 .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 25px; }
-.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; transition: 0.2s; }
-.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; }
 .label { font-size: 13px; text-transform: uppercase; color: #8899a6; font-weight: 900; letter-spacing: 2px; }
 .main-val { font-size: 64px; font-weight: 900; margin: 5px 0; }
 .sub-val { font-size: 16px; color: var(--accent); font-weight: 700; }
@@ -34,14 +33,14 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 .overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; flex-direction:column; }
 .toolbar { display:flex; padding:15px; background: #0b141d; border-bottom: 2px solid var(--border); align-items: center; }
 .content { flex: 1; overflow-y: auto; padding: 20px; }
-.chart-box { height: 65vh; background: #000; border-radius: 16px; padding: 15px; border: 1px solid var(--border); }
+.chart-box { height: 65vh; background: #000; border-radius: 16px; padding: 15px; }
 </style>
 </head>
 <body>
 
 <header>
-  <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">🐾 CANNOLI PRO X</div>
-  <div id="status-tag">Syncing Arvada Station...</div>
+  <div style="font-weight: 900; font-size: 20px;">🐾 CANNOLI PRO X</div>
+  <div id="status-tag">Status: Connecting...</div>
 </header>
 
 <div class="controls">
@@ -91,7 +90,7 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 <div id="overlay-chart" class="overlay">
   <div class="toolbar">
     <h2 id="chart-title" style="flex:1; margin:0; font-size:14px; text-transform:uppercase;">Trend Analysis</h2>
-    <button class="btn" onclick="closeOverlay('overlay-chart')" style="background:#ff4d4d; color:white;">CLOSE ✕</button>
+    <button class="btn" onclick="closeOverlay('overlay-chart')" style="background:#ff4d4d; color:white;">✕</button>
   </div>
   <div class="content"><div class="chart-box"><canvas id="main-canvas"></canvas></div></div>
 </div>
@@ -99,40 +98,42 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 <script>
 let allData = [], filteredData = [], chartInstance = null;
 
-function logStatus(msg, isError = false) {
-    const el = document.getElementById('status-tag');
-    el.innerText = msg.toUpperCase();
-    if (isError) el.style.color = "#ff4d4d";
-}
-
-// Safer date formatter to prevent the "Numerical Input" error
-function formatDate(ts) {
-    if (!ts || isNaN(ts)) return "Unknown Time";
-    return luxon.DateTime.fromSeconds(Number(ts)).toFormat('MMM d, h:mm a');
+// The simplest date formatter
+function helperDate(ts) {
+    try {
+        if (!ts) return "N/A";
+        return luxon.DateTime.fromSeconds(Number(ts)).toFormat('LLL d, h:mm a');
+    } catch(e) { return "Error"; }
 }
 
 async function init() {
     try {
-        const r = await fetch('./weather_history.json?v=' + Date.now());
-        if (!r.ok) throw new Error("404: Data not found");
-        allData = await r.json();
+        const response = await fetch('./weather_history.json');
+        if (!response.ok) throw new Error("File not found");
         
-        // Filter out any corrupt records that might be missing 'ob' or 'timestamp'
-        allData = allData.filter(d => d && d.timestamp && d.ob);
-        allData.sort((a,b) => a.timestamp - b.timestamp);
+        allData = await response.json();
         
-        logStatus(`${allData.length.toLocaleString()} Records Active`);
-        setFilter(30); 
+        // Final sanity check on data structure
+        if (Array.isArray(allData) && allData.length > 0) {
+            allData.sort((a,b) => a.timestamp - b.timestamp);
+            document.getElementById('status-tag').innerText = allData.length.toLocaleString() + " Records Loaded";
+            setFilter(30); 
+        } else {
+            document.getElementById('status-tag').innerText = "Data file is empty";
+        }
     } catch (e) { 
-        logStatus(e.message, true);
+        document.getElementById('status-tag').innerText = "Connection Error";
+        console.error(e);
     }
 }
 
 function setFilter(days) {
     const cutoff = (Date.now() / 1000) - (days * 24 * 60 * 60);
     filteredData = (days === 30) ? allData : allData.filter(d => d.timestamp >= cutoff);
+    
     document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
     document.getElementById(`f-${days}`).classList.add('active');
+    
     updateDashboard(days);
 }
 
@@ -141,12 +142,12 @@ function updateDashboard(days) {
     const latest = filteredData[filteredData.length - 1].ob;
     
     document.getElementById('v-temp').innerText = Math.round(latest.tempF) + "°";
-    document.getElementById('v-feels').innerText = "FEELS: " + Math.round(latest.feelslikeF || latest.tempF) + "°";
+    document.getElementById('v-feels').innerText = "Feels: " + Math.round(latest.feelslikeF || latest.tempF) + "°";
     document.getElementById('v-wind').innerText = Math.round(latest.windSpeedMPH);
-    document.getElementById('v-gust').innerText = "GUST: " + Math.round(latest.windGustMPH || 0) + " MPH";
+    document.getElementById('v-gust').innerText = "Gust: " + Math.round(latest.windGustMPH || 0) + " mph";
     document.getElementById('v-hum').innerText = latest.humidity + "%";
     document.getElementById('v-pressure').innerText = latest.pressureMB + " hPa";
-    document.getElementById('v-sol').innerText = latest.solradWM2 || 0;
+    document.getElementById('v-sol').innerText = (latest.solradWM2 || 0);
     document.getElementById('v-uv').innerText = "UV: " + (latest.uv || 0);
 
     const tempVals = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp }));
@@ -156,16 +157,31 @@ function updateDashboard(days) {
     const windVals = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
     const maxW = windVals.reduce((p, c) => (p.v > c.v) ? p : c);
 
-    document.getElementById('v-temp-range').innerHTML = 
-        `MAX: ${Math.round(maxT.v)}° (${formatDate(maxT.t)})<br>MIN: ${Math.round(minT.v)}° (${formatDate(minT.t)})`;
-    
-    document.getElementById('v-wind-max').innerText = `PEAK: ${Math.round(maxW.v)} MPH (${formatDate(maxW.t)})`;
+    document.getElementById('v-temp-range').innerHTML = `HI: ${Math.round(maxT.v)}° (${helperDate(maxT.t)})<br>LO: ${Math.round(minT.v)}° (${helperDate(minT.t)})`;
+    document.getElementById('v-wind-max').innerText = `Peak: ${Math.round(maxW.v)} mph (${helperDate(maxW.t)})`;
 
-    document.getElementById('summary-title').innerText = `${days === 30 ? 'Historical' : days + '-Day'} Risk Analysis`;
+    document.getElementById('summary-title').innerText = `${days === 30 ? 'All-Time' : days + '-Day'} Risk Analysis`;
     buildSummary();
 }
 
 function buildSummary() {
     const params = [{ n: 'Temperature', k: 'tempF', u: '°' }, { n: 'Wind Speed', k: 'windSpeedMPH', u: ' mph' }, { n: 'Humidity', k: 'humidity', u: '%' }];
     document.getElementById('summary-body').innerHTML = params.map(p => {
-        const vals = filteredData.map(d => d.ob[p.k]).filter(v =>
+        const vals = filteredData.map(d => d.ob[p.k]).filter(v => v !== null);
+        const high = Math.max(...vals), low = Math.min(...vals), avg = vals.reduce((a,b)=>a+b)/vals.length;
+        return `<tr><td>${p.n}</td><td>${Math.round(high)}${p.u}</td><td>${Math.round(low)}${p.u}</td><td>${Math.round(avg)}${p.u}</td></tr>`;
+    }).join('');
+}
+
+function openChart(type) {
+    document.getElementById('overlay-chart').style.display = 'flex';
+    const ctx = document.getElementById('main-canvas');
+    if(chartInstance) chartInstance.destroy();
+    const keyMap = { temp: 'tempF', wind: 'windSpeedMPH', humidity: 'humidity', solar: 'solradWM2' };
+    
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [{
+            label: type.toUpperCase(),
+            data: filteredData.map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] })),
+            borderColor: '#00d2ff', fill: true,

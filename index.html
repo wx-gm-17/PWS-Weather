@@ -2,48 +2,109 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🐾 Cannoli Pro History</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+
     <style>
-        body { background: #060d14; color: white; font-family: sans-serif; padding: 20px; }
-        .chart-container { background: #0b141d; padding: 20px; border-radius: 15px; border: 1px solid #1c3d5a; height: 70vh; }
-        header { margin-bottom: 20px; border-bottom: 2px solid #00d2ff; padding-bottom: 10px; }
+        :root {
+            --bg: #060d14;
+            --card: #0b141d;
+            --accent: #00d2ff;
+            --border: #1c3d5a;
+            --text: #ffffff;
+        }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            margin: 0;
+            padding: 20px;
+        }
+        header { 
+            border-bottom: 2px solid var(--border); 
+            padding-bottom: 20px; 
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-weight: 900; letter-spacing: -1px; }
+        .chart-box { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 20px; 
+            border: 1px solid var(--border);
+            height: 70vh;
+            position: relative;
+        }
+        #status-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--accent);
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
-    <header>
-        <h1>🐾 CANNOLI PRO: 1-Year History</h1>
-        <p>Station: KCOARVAD722 | Data source: Xweather Archive</p>
-    </header>
 
-    <div class="chart-container">
-        <canvas id="historyChart"></canvas>
+<header>
+    <div>
+        <h1>🐾 CANNOLI PRO</h1>
+        <div style="color: #8899a6; font-size: 14px; margin-top: 5px;">KCOARVAD722 Historical Archive</div>
     </div>
+    <button onclick="location.reload()" style="background: var(--accent); border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">REFRESH</button>
+</header>
 
-    <script>
-        async function loadHistory() {
-            // This fetches the file you created in Step 4
+<div class="chart-box">
+    <div id="status-msg">Fetching 1-year history...</div>
+    <canvas id="historyChart"></canvas>
+</div>
+
+<script>
+    async function init() {
+        const status = document.getElementById('status-msg');
+        
+        try {
+            // 1. Fetch the data file
             const response = await fetch('./weather_history.json');
+            if (!response.ok) throw new Error("Could not find weather_history.json");
+            
             const data = await response.json();
+            if (!data || data.length === 0) throw new Error("Weather file is empty.");
 
-            // Xweather stores time as 'timestamp' and values inside 'ob'
-            const labels = data.map(entry => entry.timestamp * 1000); // Convert to milliseconds
-            const temps = data.map(entry => entry.ob.tempF);
+            // 2. Hide the loading message
+            status.style.display = 'none';
 
+            // 3. Map the data points
+            // Xweather format: entry.timestamp and entry.ob.tempF
+            const chartData = data.map(entry => {
+                let time = entry.timestamp ? entry.timestamp * 1000 : null;
+                let temp = entry.ob ? (entry.ob.tempF ?? entry.ob.temp) : null;
+                
+                return { x: time, y: temp };
+            }).filter(p => p.x !== null && p.y !== null);
+
+            // 4. Render Chart
             const ctx = document.getElementById('historyChart').getContext('2d');
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
                     datasets: [{
                         label: 'Temperature (°F)',
-                        data: temps,
+                        data: chartData,
                         borderColor: '#00d2ff',
-                        borderWidth: 1,
-                        pointRadius: 0, // Hides dots for a cleaner look with 100k points
-                        fill: false
+                        backgroundColor: 'rgba(0, 210, 255, 0.1)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: true,
+                        tension: 0.1
                     }]
                 },
                 options: {
@@ -52,20 +113,35 @@
                     scales: {
                         x: { 
                             type: 'time',
-                            time: { unit: 'month' },
-                            grid: { color: '#1c3d5a' }
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#8899a6' }
                         },
-                        y: { grid: { color: '#1c3d5a' } }
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#8899a6' }
+                        }
                     },
                     plugins: {
-                        legend: { labels: { color: 'white' } }
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0b141d',
+                            titleColor: '#00d2ff',
+                            borderColor: '#1c3d5a',
+                            borderWidth: 1
+                        }
                     }
                 }
             });
-            
-        }
 
-        loadHistory();
-    </script>
+        } catch (err) {
+            status.innerText = "❌ Error: " + err.message;
+            status.style.color = "#ff4d4d";
+            console.error(err);
+        }
+    }
+
+    init();
+</script>
+
 </body>
 </html>

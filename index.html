@@ -59,11 +59,11 @@
         <h1>🐾 CANNOLI PRO</h1>
         <div style="color: #8899a6; font-size: 14px; margin-top: 5px;">KCOARVAD722 Historical Archive</div>
     </div>
-    <button onclick="location.reload()" style="background: var(--accent); border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">REFRESH</button>
+    <button onclick="location.reload()" style="background: var(--accent); border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; color: #000;">REFRESH</button>
 </header>
 
 <div class="chart-box">
-    <div id="status-msg">Fetching 1-year history...</div>
+    <div id="status-msg">Loading 1-Year Archive...</div>
     <canvas id="historyChart"></canvas>
 </div>
 
@@ -77,16 +77,17 @@
             if (!response.ok) throw new Error("Could not find weather_history.json");
             
             const data = await response.json();
-            if (!data || data.length === 0) throw new Error("Weather file is empty.");
+            if (!data || data.length === 0) throw new Error("Weather file is currently empty.");
 
             // 2. Hide the loading message
             status.style.display = 'none';
 
-            // 3. Map the data points
-            // Xweather format: entry.timestamp and entry.ob.tempF
+            // 3. Map the data points for Weather Underground format
             const chartData = data.map(entry => {
-                let time = entry.timestamp ? entry.timestamp * 1000 : null;
-                let temp = entry.ob ? (entry.ob.tempF ?? entry.ob.temp) : null;
+                // Use epoch (seconds) and convert to milliseconds
+                const time = entry.epoch ? entry.epoch * 1000 : null;
+                // Weather Underground nests imperial units
+                const temp = entry.imperial ? entry.imperial.tempAvg : null;
                 
                 return { x: time, y: temp };
             }).filter(p => p.x !== null && p.y !== null);
@@ -97,14 +98,14 @@
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: 'Temperature (°F)',
+                        label: 'Avg Temperature (°F)',
                         data: chartData,
                         borderColor: '#00d2ff',
                         backgroundColor: 'rgba(0, 210, 255, 0.1)',
-                        borderWidth: 1.5,
+                        borderWidth: 1,
                         pointRadius: 0,
                         fill: true,
-                        tension: 0.1
+                        tension: 0.2
                     }]
                 },
                 options: {
@@ -113,17 +114,21 @@
                     scales: {
                         x: { 
                             type: 'time',
+                            time: { unit: 'month' },
                             grid: { color: 'rgba(255,255,255,0.05)' },
                             ticks: { color: '#8899a6' }
                         },
                         y: { 
                             grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { color: '#8899a6' }
+                            ticks: { color: '#8899a6' },
+                            title: { display: true, text: 'Degrees Fahrenheit', color: '#8899a6' }
                         }
                     },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            mode: 'index',
+                            intersect: false,
                             backgroundColor: '#0b141d',
                             titleColor: '#00d2ff',
                             borderColor: '#1c3d5a',

@@ -1,34 +1,38 @@
-name: Daily Weather Update
+name: Daily Weather Harvest
 
 on:
   schedule:
-    - cron: '0 8 * * *'
-  workflow_dispatch:
+    # Runs at 10:00 UTC (4:00 AM MDT) every day
+    - cron: '0 10 * * *'
+  workflow_dispatch: # Allows you to run it manually from the Actions tab
+
+permissions:
+  contents: write
 
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4 # Already v4, which is good
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Upgraded to v5
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Install Dependencies
-        run: pip install requests
-
-      - name: Run Harvest
-        run: python harvest.py
-
-      - name: Save Data
+      - name: Install dependencies
         run: |
-          git config --global user.name "Weather Bot"
-          git config --global user.email "bot@github.com"
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run data harvest script
+        run: python fetch_weather.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add weather_history.json
-          git commit -m "Update history: $(date)" || exit 0
+          git commit -m "Automated data harvest update" || exit 0
           git push

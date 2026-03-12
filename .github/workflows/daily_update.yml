@@ -1,0 +1,33 @@
+name: Daily Weather Update
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Runs every day at 2:00 AM Mountain Time
+  workflow_dispatch: # Allows you to run it manually for testing
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Run Update Script
+        run: python harvest.py # This runs your script to get new data
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "Weather Bot"
+          git config --global user.email "bot@github.com"
+          git add weather_history.json
+          git commit -m "Automated daily weather update" || exit 0
+          git push
+          

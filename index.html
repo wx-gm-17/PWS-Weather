@@ -21,8 +21,7 @@ header { background: #0b141d; padding: 20px; display: flex; justify-content: spa
 .btn-csv { background: #2ecc71; margin-left: auto; }
 
 .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 25px; }
-.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; transition: 0.2s; }
-.card:hover { border-color: var(--accent); }
+.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; }
 .label { font-size: 14px; text-transform: uppercase; color: #8899a6; font-weight: 900; letter-spacing: 2px; }
 .main-val { font-size: 64px; font-weight: 900; margin: 5px 0; }
 .sub-val { font-size: 16px; color: var(--accent); font-weight: 700; }
@@ -43,13 +42,13 @@ td { padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
 <header>
   <div style="font-weight: 900; font-size: 20px;">🐾 CANNOLI PRO X</div>
-  <button class="btn" onclick="location.reload()">REFRESH</button>
+  <div id="status-tag" style="font-size: 12px; color: #8899a6;">41,958 Records Ready</div>
 </header>
 
 <div class="controls">
-  <button class="btn btn-filter" id="f-24" onclick="setFilter(1)">24 Hours</button>
+  <button class="btn btn-filter" id="f-1" onclick="setFilter(1)">Today</button>
   <button class="btn btn-filter" id="f-7" onclick="setFilter(7)">7 Days</button>
-  <button class="btn btn-filter active" id="f-30" onclick="setFilter(30)">30 Days</button>
+  <button class="btn btn-filter active" id="f-30" onclick="setFilter(30)">All History</button>
   <button class="btn btn-csv" onclick="downloadCSV()">💾 EXPORT CSV</button>
 </div>
 
@@ -83,7 +82,7 @@ td { padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
 <div class="summary-container">
   <table>
-    <thead><tr><th id="summary-title">Loading Risk Analysis...</th><th>High</th><th>Low</th><th>Average</th></tr></thead>
+    <thead><tr><th id="summary-title">Risk Analysis</th><th>High</th><th>Low</th><th>Average</th></tr></thead>
     <tbody id="summary-body"></tbody>
   </table>
 </div>
@@ -97,43 +96,32 @@ td { padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
 </div>
 
 <script>
-let allData = [], filteredData = [], chartInstance = null, currentDays = 30;
-
-// This relative path is key for wx-gm-17.github.io
-const DATA_PATH = './weather_history.json';
+let allData = [], filteredData = [], chartInstance = null;
 
 async function init() {
     try {
-        const r = await fetch(DATA_PATH);
-        if (!r.ok) throw new Error(`HTTP Error ${r.status}`);
-        
+        const r = await fetch('./weather_history.json');
         allData = await r.json();
-        
-        if (Array.isArray(allData)) {
-            allData.sort((a,b) => a.timestamp - b.timestamp);
-            setFilter(30); 
-        } else {
-            throw new Error("Invalid Data Format");
-        }
+        allData.sort((a,b) => a.timestamp - b.timestamp);
+        setFilter(30); 
     } catch (e) { 
         console.error(e);
-        document.getElementById('summary-title').innerText = "❌ Data Connection Error";
+        document.getElementById('summary-title').innerText = "❌ Load Error - Check JSON Path";
     }
 }
 
 function setFilter(days) {
-    currentDays = days;
     const cutoff = (Date.now() / 1000) - (days * 24 * 60 * 60);
-    filteredData = allData.filter(d => d.timestamp >= cutoff);
+    // If selecting "30", we show everything in your 41k record set
+    filteredData = (days === 30) ? allData : allData.filter(d => d.timestamp >= cutoff);
     
     document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
-    const btnId = `f-${days === 1 ? '24' : days}`;
-    if(document.getElementById(btnId)) document.getElementById(btnId).classList.add('active');
+    document.getElementById(`f-${days}`).classList.add('active');
     
-    updateDashboard();
+    updateDashboard(days);
 }
 
-function updateDashboard() {
+function updateDashboard(days) {
     if (!filteredData.length) return;
     const latest = filteredData[filteredData.length - 1].ob;
     
@@ -156,7 +144,7 @@ function updateDashboard() {
     document.getElementById('v-temp-range').innerHTML = `HI: ${Math.round(maxT.v)}° (${luxon.DateTime.fromSeconds(maxT.t).toFormat('LLL d, h:mm a')})<br>LO: ${Math.round(minT.v)}° (${luxon.DateTime.fromSeconds(minT.t).toFormat('LLL d, h:mm a')})`;
     document.getElementById('v-wind-max').innerText = `Peak: ${Math.round(maxW.v)} mph (${luxon.DateTime.fromSeconds(maxW.t).toFormat('LLL d, h:mm a')})`;
 
-    document.getElementById('summary-title').innerText = `${currentDays === 1 ? '24-Hour' : currentDays + '-Day'} Risk Analysis`;
+    document.getElementById('summary-title').innerText = `${days === 1 ? 'Today' : days + '-Day'} Risk Analysis`;
     buildSummary();
 }
 
@@ -177,34 +165,3 @@ function openChart(type) {
     
     chartInstance = new Chart(ctx, {
         type: 'line',
-        data: { datasets: [{
-            label: type.toUpperCase(),
-            data: filteredData.map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] })),
-            borderColor: '#00d2ff', fill: true, backgroundColor: 'rgba(0,210,255,0.05)', pointRadius: 0, tension: 0.1
-        }]},
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: { x: { type: 'time', time: { unit: currentDays === 1 ? 'hour' : 'day' } } }
-        }
-    });
-}
-
-function downloadCSV() {
-    let csv = "Timestamp,DateTime,TempF,Humidity,WindMPH,GustMPH,PressureMB\n";
-    filteredData.forEach(d => {
-        const dt = luxon.DateTime.fromSeconds(d.timestamp).toISO();
-        csv += `${d.timestamp},${dt},${d.ob.tempF},${d.ob.humidity},${d.ob.windSpeedMPH},${d.ob.windGustMPH},${d.ob.pressureMB}\n`;
-    });
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `Arvada_Weather_${currentDays}d.csv`);
-    a.click();
-}
-
-function closeOverlay(id) { document.getElementById(id).style.display = 'none'; }
-init();
-</script>
-</body>
-</html>

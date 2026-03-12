@@ -33,14 +33,14 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 .overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; flex-direction:column; }
 .toolbar { display:flex; padding:15px; background: #0b141d; border-bottom: 2px solid var(--border); align-items: center; }
 .content { flex: 1; overflow-y: auto; padding: 20px; }
-.chart-box { height: 65vh; background: #000; border-radius: 16px; padding: 15px; border: 1px solid var(--border); }
+.chart-box { height: 65vh; background: #000; border-radius: 16px; padding: 15px; }
 </style>
 </head>
 <body>
 
 <header>
-  <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">🐾 CANNOLI PRO X</div>
-  <div id="status-tag">INITIALIZING...</div>
+  <div style="font-weight: 900; font-size: 20px;">🐾 CANNOLI PRO X</div>
+  <div id="status-tag">Connecting...</div>
 </header>
 
 <div class="controls">
@@ -58,21 +58,18 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
     <div id="v-feels" class="sub-val">--</div>
     <span id="v-temp-range" class="occurrence">--</span>
   </div>
-  
   <div class="card" onclick="openChart('wind')">
     <div class="label">Wind Speed</div>
     <div id="v-wind" class="main-val">--</div>
     <div id="v-gust" class="sub-val">--</div>
     <span id="v-wind-max" class="occurrence">--</span>
   </div>
-
   <div class="card" onclick="openChart('humidity')">
     <div class="label">Humidity</div>
     <div id="v-hum" class="main-val">--</div>
     <div id="v-pressure" class="sub-val">--</div>
     <span class="occurrence">Rel. Humidity & Pressure</span>
   </div>
-
   <div class="card" onclick="openChart('solar')">
     <div class="label">Solar</div>
     <div id="v-sol" class="main-val">--</div>
@@ -90,8 +87,8 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 
 <div id="overlay-chart" class="overlay">
   <div class="toolbar">
-    <h2 id="chart-title" style="flex:1; margin:0; font-size:14px; text-transform:uppercase;">Trend Analysis</h2>
-    <button class="btn" onclick="closeOverlay('overlay-chart')" style="background:#ff4d4d; color:white;">CLOSE ✕</button>
+    <h2 id="chart-title" style="flex:1; margin:0; font-size:14px;">TREND ANALYSIS</h2>
+    <button class="btn" onclick="closeOverlay('overlay-chart')" style="background:#ff4d4d; color:white;">✕</button>
   </div>
   <div class="content"><div class="chart-box"><canvas id="main-canvas"></canvas></div></div>
 </div>
@@ -99,117 +96,73 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 <script>
 let allData = [], filteredData = [], chartInstance = null;
 
-function safeDate(ts) {
+// Helper for formatting dates safely
+function helperDate(ts) {
     if (!ts || isNaN(ts)) return "N/A";
-    return luxon.DateTime.fromSeconds(Number(ts)).toFormat('MMM d, h:mm a');
+    return luxon.DateTime.fromSeconds(Number(ts)).toFormat('LLL d, h:mm a');
 }
 
 async function init() {
     try {
-        const r = await fetch('./weather_history.json?v=' + Date.now());
-        if (!r.ok) throw new Error("Data file not found");
-        allData = await r.json();
+        const response = await fetch('./weather_history.json?v=' + Date.now());
+        allData = await response.json();
         
-        // Remove any record that has a null timestamp
-        allData = allData.filter(d => d && d.timestamp && !isNaN(d.timestamp));
+        // Basic cleanup: ensure we have timestamps
+        allData = allData.filter(d => d && d.timestamp);
         allData.sort((a,b) => a.timestamp - b.timestamp);
         
-        document.getElementById('status-tag').innerText = `${allData.length.toLocaleString()} Records Connected`;
-        setFilter(1); // Set to Today immediately
-    } catch (e) { 
+        document.getElementById('status-tag').innerText = allData.length.toLocaleString() + " Records Connected";
+        
+        // Default to Today
+        setFilter(1);
+    } catch (e) {
         document.getElementById('status-tag').innerText = "Load Error";
         console.error(e);
     }
 }
 
 function setFilter(days) {
-    const nowSecs = Math.floor(Date.now() / 1000);
-    const cutoff = nowSecs - (days * 24 * 60 * 60);
+    const cutoff = (Date.now() / 1000) - (days * 24 * 60 * 60);
     
+    // Filter logic: If it's the "Year" button, show all. Otherwise, filter by time.
     filteredData = (days === 365) ? allData : allData.filter(d => d.timestamp >= cutoff);
     
-    // Update button colors
+    // Update active button state
     document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
-    document.getElementById(`f-${days}`).classList.add('active');
+    const activeBtn = document.getElementById(`f-${days}`);
+    if (activeBtn) activeBtn.classList.add('active');
     
-    renderDashboard(days);
+    updateDisplay(days);
 }
 
-function renderDashboard(days) {
-    if (!filteredData.length || !allData.length) return;
-    
-    // Current weather is ALWAYS from the absolute last record in allData
+function updateDisplay(days) {
+    if (!filteredData.length) return;
+
+    // Use the absolute latest record for current conditions
     const current = allData[allData.length - 1].ob;
     
-    document.getElementById('v-temp').innerText = Math.round(current.tempF || 0) + "°";
-    document.getElementById('v-feels').innerText = "FEELS: " + Math.round(current.feelslikeF || current.tempF || 0) + "°";
-    document.getElementById('v-wind').innerText = Math.round(current.windSpeedMPH || 0);
-    document.getElementById('v-gust').innerText = "GUST: " + Math.round(current.windGustMPH || 0) + " MPH";
-    document.getElementById('v-hum').innerText = (current.humidity || 0) + "%";
-    document.getElementById('v-pressure').innerText = (current.pressureMB || 0) + " hPa";
-    document.getElementById('v-sol').innerText = current.solradWM2 || 0;
+    document.getElementById('v-temp').innerText = Math.round(current.tempF) + "°";
+    document.getElementById('v-feels').innerText = "Feels: " + Math.round(current.feelslikeF || current.tempF) + "°";
+    document.getElementById('v-wind').innerText = Math.round(current.windSpeedMPH);
+    document.getElementById('v-gust').innerText = "Gust: " + Math.round(current.windGustMPH || 0) + " mph";
+    document.getElementById('v-hum').innerText = current.humidity + "%";
+    document.getElementById('v-pressure').innerText = current.pressureMB + " hPa";
+    document.getElementById('v-sol').innerText = (current.solradWM2 || 0);
     document.getElementById('v-uv').innerText = "UV: " + (current.uv || 0);
 
-    // Max/Min from the filtered subset
+    // Calc HI/LO for the specific filtered timeframe
     const temps = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp }));
     const maxT = temps.reduce((p, c) => (p.v > c.v) ? p : c);
     const minT = temps.reduce((p, c) => (p.v < c.v) ? p : c);
     
-    const windGusts = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
-    const maxW = windGusts.reduce((p, c) => (p.v > c.v) ? p : c);
+    const gusts = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
+    const maxW = gusts.reduce((p, c) => (p.v > c.v) ? p : c);
 
-    document.getElementById('v-temp-range').innerHTML = `MAX: ${Math.round(maxT.v)}° (${safeDate(maxT.t)})<br>MIN: ${Math.round(minT.v)}° (${safeDate(minT.t)})`;
-    document.getElementById('v-wind-max').innerText = `PEAK: ${Math.round(maxW.v)} MPH (${safeDate(maxW.t)})`;
+    document.getElementById('v-temp-range').innerHTML = `HI: ${Math.round(maxT.v)}° (${helperDate(maxT.t)})<br>LO: ${Math.round(minT.v)}° (${helperDate(minT.t)})`;
+    document.getElementById('v-wind-max').innerText = `Peak: ${Math.round(maxW.v)} mph (${helperDate(maxW.t)})`;
 
-    document.getElementById('summary-title').innerText = days === 1 ? "Today's Risk Analysis" : `${days}-Day Analysis`;
-    buildSummaryTable();
-}
-
-function buildSummaryTable() {
-    const metrics = [
-        { name: 'Temperature', key: 'tempF', unit: '°' },
-        { name: 'Wind Speed', key: 'windSpeedMPH', unit: ' mph' },
-        { name: 'Humidity', key: 'humidity', unit: '%' }
-    ];
-
-    document.getElementById('summary-body').innerHTML = metrics.map(m => {
-        const vals = filteredData.map(d => d.ob[m.key]).filter(v => v !== null && !isNaN(v));
-        if (!vals.length) return '';
-        const high = Math.max(...vals), low = Math.min(...vals), avg = vals.reduce((a,b)=>a+b)/vals.length;
-        return `<tr><td>${m.name}</td><td>${Math.round(high)}${m.unit}</td><td>${Math.round(low)}${m.unit}</td><td>${Math.round(avg)}${m.unit}</td></tr>`;
-    }).join('');
-}
-
-function openChart(type) {
-    document.getElementById('overlay-chart').style.display = 'flex';
-    const ctx = document.getElementById('main-canvas');
-    if (chartInstance) chartInstance.destroy();
+    document.getElementById('summary-title').innerText = `${days === 1 ? 'Today' : days + '-Day'} Risk Analysis`;
     
-    const keyMap = { temp: 'tempF', wind: 'windSpeedMPH', humidity: 'humidity', solar: 'solradWM2' };
-    
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            datasets: [{
-                label: type.toUpperCase(),
-                data: filteredData.map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] })),
-                borderColor: '#00d2ff', borderWidth: 2, fill: true, backgroundColor: 'rgba(0,210,255,0.1)', pointRadius: 0, tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                x: { type: 'time', time: { unit: 'day' }, grid: { display: false } },
-                y: { grid: { color: 'rgba(255,255,255,0.05)' } }
-            }
-        }
-    });
-}
-
-function closeOverlay(id) { document.getElementById(id).style.display = 'none'; }
-function downloadCSV() { /* Export Logic */ }
-
-init();
-</script>
-</body>
-</html>
+    // Refresh Table
+    const params = [{ n: 'Temperature', k: 'tempF', u: '°' }, { n: 'Wind Speed', k: 'windSpeedMPH', u: ' mph' }, { n: 'Humidity', k: 'humidity', u: '%' }];
+    document.getElementById('summary-body').innerHTML

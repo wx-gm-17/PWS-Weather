@@ -98,23 +98,25 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 <script>
 let allData = [], filteredData = [], chartInstance = null;
 
-// The simplest date formatter
+// The logic you requested: If null or non-numerical, skip or return N/A
 function helperDate(ts) {
+    if (!ts || isNaN(ts) || ts === null) return "N/A";
     try {
-        if (!ts) return "N/A";
         return luxon.DateTime.fromSeconds(Number(ts)).toFormat('LLL d, h:mm a');
-    } catch(e) { return "Error"; }
+    } catch(e) { return "N/A"; }
 }
 
 async function init() {
     try {
-        const response = await fetch('./weather_history.json');
+        const response = await fetch('./weather_history.json?v=' + Date.now());
         if (!response.ok) throw new Error("File not found");
         
-        allData = await response.json();
+        const raw = await response.json();
         
-        // Final sanity check on data structure
-        if (Array.isArray(allData) && allData.length > 0) {
+        // This is the specific line you asked for: It filters out any record where 'ob' or 'timestamp' is missing or null
+        allData = raw.filter(d => d && d.timestamp && !isNaN(d.timestamp) && d.ob);
+        
+        if (allData.length > 0) {
             allData.sort((a,b) => a.timestamp - b.timestamp);
             document.getElementById('status-tag').innerText = allData.length.toLocaleString() + " Records Loaded";
             setFilter(30); 
@@ -130,10 +132,8 @@ async function init() {
 function setFilter(days) {
     const cutoff = (Date.now() / 1000) - (days * 24 * 60 * 60);
     filteredData = (days === 30) ? allData : allData.filter(d => d.timestamp >= cutoff);
-    
     document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
     document.getElementById(`f-${days}`).classList.add('active');
-    
     updateDashboard(days);
 }
 
@@ -141,24 +141,27 @@ function updateDashboard(days) {
     if (!filteredData.length) return;
     const latest = filteredData[filteredData.length - 1].ob;
     
-    document.getElementById('v-temp').innerText = Math.round(latest.tempF) + "°";
-    document.getElementById('v-feels').innerText = "Feels: " + Math.round(latest.feelslikeF || latest.tempF) + "°";
-    document.getElementById('v-wind').innerText = Math.round(latest.windSpeedMPH);
+    document.getElementById('v-temp').innerText = Math.round(latest.tempF || 0) + "°";
+    document.getElementById('v-feels').innerText = "Feels: " + Math.round(latest.feelslikeF || latest.tempF || 0) + "°";
+    document.getElementById('v-wind').innerText = Math.round(latest.windSpeedMPH || 0);
     document.getElementById('v-gust').innerText = "Gust: " + Math.round(latest.windGustMPH || 0) + " mph";
-    document.getElementById('v-hum').innerText = latest.humidity + "%";
-    document.getElementById('v-pressure').innerText = latest.pressureMB + " hPa";
+    document.getElementById('v-hum').innerText = (latest.humidity || 0) + "%";
+    document.getElementById('v-pressure').innerText = (latest.pressureMB || 0) + " hPa";
     document.getElementById('v-sol').innerText = (latest.solradWM2 || 0);
     document.getElementById('v-uv').innerText = "UV: " + (latest.uv || 0);
 
-    const tempVals = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp }));
-    const maxT = tempVals.reduce((p, c) => (p.v > c.v) ? p : c);
-    const minT = tempVals.reduce((p, c) => (p.v < c.v) ? p : c);
-    
-    const windVals = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
-    const maxW = windVals.reduce((p, c) => (p.v > c.v) ? p : c);
+    const tempVals = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp })).filter(item => item.v !== null);
+    if (tempVals.length) {
+        const maxT = tempVals.reduce((p, c) => (p.v > c.v) ? p : c);
+        const minT = tempVals.reduce((p, c) => (p.v < c.v) ? p : c);
+        document.getElementById('v-temp-range').innerHTML = `HI: ${Math.round(maxT.v)}° (${helperDate(maxT.t)})<br>LO: ${Math.round(minT.v)}° (${helperDate(minT.t)})`;
+    }
 
-    document.getElementById('v-temp-range').innerHTML = `HI: ${Math.round(maxT.v)}° (${helperDate(maxT.t)})<br>LO: ${Math.round(minT.v)}° (${helperDate(minT.t)})`;
-    document.getElementById('v-wind-max').innerText = `Peak: ${Math.round(maxW.v)} mph (${helperDate(maxW.t)})`;
+    const windVals = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
+    if (windVals.length) {
+        const maxW = windVals.reduce((p, c) => (p.v > c.v) ? p : c);
+        document.getElementById('v-wind-max').innerText = `Peak: ${Math.round(maxW.v)} mph (${helperDate(maxW.t)})`;
+    }
 
     document.getElementById('summary-title').innerText = `${days === 30 ? 'All-Time' : days + '-Day'} Risk Analysis`;
     buildSummary();
@@ -167,7 +170,8 @@ function updateDashboard(days) {
 function buildSummary() {
     const params = [{ n: 'Temperature', k: 'tempF', u: '°' }, { n: 'Wind Speed', k: 'windSpeedMPH', u: ' mph' }, { n: 'Humidity', k: 'humidity', u: '%' }];
     document.getElementById('summary-body').innerHTML = params.map(p => {
-        const vals = filteredData.map(d => d.ob[p.k]).filter(v => v !== null);
+        const vals = filteredData.map(d => d.ob[p.k]).filter(v => v !== null && !isNaN(v));
+        if (!vals.length) return '';
         const high = Math.max(...vals), low = Math.min(...vals), avg = vals.reduce((a,b)=>a+b)/vals.length;
         return `<tr><td>${p.n}</td><td>${Math.round(high)}${p.u}</td><td>${Math.round(low)}${p.u}</td><td>${Math.round(avg)}${p.u}</td></tr>`;
     }).join('');
@@ -184,4 +188,22 @@ function openChart(type) {
         data: { datasets: [{
             label: type.toUpperCase(),
             data: filteredData.map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] })),
-            borderColor: '#00d2ff', fill: true,
+            borderColor: '#00d2ff', fill: true, backgroundColor: 'rgba(0,210,255,0.05)', pointRadius: 0, tension: 0.1
+        }]},
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { type: 'time', time: { unit: 'day' } } }
+        }
+    });
+}
+
+function downloadCSV() {
+    let csv = "Timestamp,DateTime,TempF,Humidity,WindMPH,GustMPH\n";
+    filteredData.forEach(d => {
+        csv += `${d.timestamp},${luxon.DateTime.fromSeconds(d.timestamp).toISO()},${d.ob.tempF},${d.ob.humidity},${d.ob.windSpeedMPH},${d.ob.windGustMPH}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Arvada_Weather.csv`;

@@ -1,47 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐾 Cannoli Pro History</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+
+    <style>
+        :root {
+            --bg: #060d14;
+            --card: #0b141d;
+            --accent: #00d2ff;
+            --border: #1c3d5a;
+            --text: #ffffff;
+            --secondary: #8899a6;
+        }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header { 
+            width: 100%;
+            max-width: 1000px;
+            border-bottom: 2px solid var(--border); 
+            padding-bottom: 20px; 
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-weight: 900; letter-spacing: -1px; display: flex; align-items: center; gap: 10px; }
+        .chart-container { 
+            width: 100%;
+            max-width: 1000px;
+            background: var(--card); 
+            padding: 25px; 
+            border-radius: 24px; 
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            height: 60vh;
+            position: relative;
+        }
+        #status-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--accent);
+            text-align: center;
+            font-weight: 600;
+        }
+        .stats-bar {
+            width: 100%;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        .stat-val { font-size: 20px; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 12px; color: var(--secondary); text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>🐾 CANNOLI PRO <span style="font-size: 14px; background: var(--border); padding: 4px 10px; border-radius: 20px;">v2.0</span></h1>
+        <div style="color: var(--secondary); font-size: 14px; margin-top: 5px;">Arvada, CO | PWS Archive</div>
+    </div>
+    <div id="data-count" style="color: var(--secondary); font-size: 12px;"></div>
+</header>
+
+<div class="chart-container">
+    <div id="status-msg">Parsing 40,000+ Records...</div>
+    <canvas id="historyChart"></canvas>
+</div>
+
+<div class="stats-bar" id="stats-bar" style="display:none;">
+    <div class="stat-card"><div class="stat-label">Max Temp</div><div class="stat-val" id="max-temp">--</div></div>
+    <div class="stat-card"><div class="stat-label">Min Temp</div><div class="stat-val" id="min-temp">--</div></div>
+    <div class="stat-card"><div class="stat-label">Last Updated</div><div class="stat-val" id="last-update" style="font-size:14px;">--</div></div>
+</div>
+
 <script>
     async function init() {
         const status = document.getElementById('status-msg');
         try {
+            // Load the JSON produced by your GitHub Action
             const response = await fetch('./weather_history.json');
-            const data = await response.json();
-            if (!data || data.length === 0) throw new Error("Data file is empty.");
+            if (!response.ok) throw new Error("Weather data file not found.");
             
+            const data = await response.json();
+            if (!data || data.length === 0) throw new Error("No data available.");
+
+            // Process data for the chart
+            const chartData = data.map(entry => {
+                const time = entry.validTimeLocal ? 
+                             luxon.DateTime.fromISO(entry.validTimeLocal).toMillis() : 
+                             (entry.timestamp * 1000);
+                const temp = entry.ob ? entry.ob.tempF : null;
+                return { x: time, y: temp };
+            }).filter(p => p.y !== null)
+              .sort((a, b) => a.x - b.x);
+
+            // Calculate Quick Stats
+            const temps = chartData.map(p => p.y);
+            document.getElementById('max-temp').innerText = Math.max(...temps).toFixed(1) + "°F";
+            document.getElementById('min-temp').innerText = Math.min(...temps).toFixed(1) + "°F";
+            document.getElementById('last-update').innerText = luxon.DateTime.fromMillis(chartData[chartData.length - 1].x).toRelative();
+            document.getElementById('data-count').innerText = chartData.length.toLocaleString() + " Data Points Loaded";
+            document.getElementById('stats-bar').style.display = 'grid';
+
             status.style.display = 'none';
 
-            // Xweather format: entry.timestamp and entry.ob.tempF
-            const chartData = data.map(entry => {
-                return { 
-                    x: entry.timestamp * 1000, 
-                    y: entry.ob ? entry.ob.tempF : null 
-                };
-            }).filter(p => p.y !== null);
-
+            // Render Chart.js
             const ctx = document.getElementById('historyChart').getContext('2d');
             new Chart(ctx, {
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: 'Temperature (°F)',
+                        label: 'Outdoor Temp (°F)',
                         data: chartData,
                         borderColor: '#00d2ff',
-                        backgroundColor: 'rgba(0, 210, 255, 0.1)',
-                        fill: true,
+                        backgroundColor: 'rgba(0, 210, 255, 0.05)',
+                        borderWidth: 1.5,
                         pointRadius: 0,
-                        tension: 0.2
+                        fill: true,
+                        tension: 0.1
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.1)' } }
+                        x: { 
+                            type: 'time', 
+                            time: { unit: 'day', displayFormats: { day: 'MMM d' } },
+                            grid: { color: 'rgba(255,255,255,0.03)' },
+                            ticks: { color: '#8899a6', maxRotation: 0 }
+                        },
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                            ticks: { color: '#8899a6' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: '#0b141d',
+                            borderColor: '#1c3d5a',
+                            borderWidth: 1,
+                            titleColor: '#00d2ff',
+                            callbacks: {
+                                label: function(context) {
+                                    return `Temp: ${context.parsed.y}°F`;
+                                }
+                            }
+                        }
                     }
                 }
             });
+
         } catch (err) {
-            status.innerText = "❌ Error: " + err.message;
+            status.innerHTML = `<span style="color:#ff4d4d">❌ Error</span><br><small>${err.message}</small>`;
+            console.error(err);
         }
     }
+
     init();
 </script>
+
+</body>
+</html>

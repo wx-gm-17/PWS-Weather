@@ -14,15 +14,14 @@
 :root { --bg: #060d14; --card: rgba(18, 32, 47, 0.95); --accent: #00d2ff; --border: rgba(255, 255, 255, 0.15); --text: #fff; }
 body { margin:0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow-x: hidden; }
 header { background: #0b141d; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
-#status-tag { font-size: 12px; color: #8899a6; font-weight: 700; }
+#status-tag { font-size: 12px; color: #8899a6; font-weight: 700; text-transform: uppercase; }
 .controls { background: #0b141d; padding: 10px 25px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); overflow-x: auto; align-items: center; }
 .btn { background: var(--accent); border: none; padding: 10px 15px; border-radius: 8px; font-weight: 900; cursor: pointer; color: #000; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
 .btn-filter { background: #1c3d5a; color: white; opacity: 0.6; }
 .btn-filter.active { background: var(--accent); color: #000; opacity: 1; }
 .btn-csv { background: #2ecc71; margin-left: auto; }
 .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 25px; }
-.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; transition: 0.2s; }
-.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.card { background: var(--card); padding: 30px 20px; border-radius: 28px; text-align: center; border: 2px solid var(--border); cursor: pointer; }
 .label { font-size: 13px; text-transform: uppercase; color: #8899a6; font-weight: 900; letter-spacing: 2px; }
 .main-val { font-size: 64px; font-weight: 900; margin: 5px 0; }
 .sub-val { font-size: 16px; color: var(--accent); font-weight: 700; }
@@ -100,8 +99,6 @@ td { padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-s
 <script>
 let allData = [], filteredData = [], chartInstance = null;
 
-function logStatus(msg) { document.getElementById('status-tag').innerText = msg.toUpperCase(); }
-
 function safeDate(ts) {
     if (!ts || isNaN(ts)) return "N/A";
     return luxon.DateTime.fromSeconds(Number(ts)).toFormat('MMM d, h:mm a');
@@ -110,85 +107,108 @@ function safeDate(ts) {
 async function init() {
     try {
         const r = await fetch('./weather_history.json?v=' + Date.now());
+        if (!r.ok) throw new Error("Data file not found");
         allData = await r.json();
+        
+        // Remove any record that has a null timestamp
+        allData = allData.filter(d => d && d.timestamp && !isNaN(d.timestamp));
         allData.sort((a,b) => a.timestamp - b.timestamp);
-        logStatus(`${allData.length.toLocaleString()} Records Connected`);
-        setFilter(1); // DEFAULT TO TODAY
-    } catch (e) { logStatus("Connection Error"); }
+        
+        document.getElementById('status-tag').innerText = `${allData.length.toLocaleString()} Records Connected`;
+        setFilter(1); // Set to Today immediately
+    } catch (e) { 
+        document.getElementById('status-tag').innerText = "Load Error";
+        console.error(e);
+    }
 }
 
 function setFilter(days) {
-    const cutoff = (Date.now() / 1000) - (days * 24 * 60 * 60);
-    // If user selects Today/Week/Month, filter. If year, show all for now since your archive is ~1 year.
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const cutoff = nowSecs - (days * 24 * 60 * 60);
+    
     filteredData = (days === 365) ? allData : allData.filter(d => d.timestamp >= cutoff);
     
+    // Update button colors
     document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
     document.getElementById(`f-${days}`).classList.add('active');
-    updateDashboard(days);
+    
+    renderDashboard(days);
 }
 
-function updateDashboard(days) {
-    if (!filteredData.length) return;
-    const latest = allData[allData.length - 1].ob; // Always show current weather from latest record
+function renderDashboard(days) {
+    if (!filteredData.length || !allData.length) return;
     
-    document.getElementById('v-temp').innerText = Math.round(latest.tempF) + "°";
-    document.getElementById('v-feels').innerText = "FEELS: " + Math.round(latest.feelslikeF || latest.tempF) + "°";
-    document.getElementById('v-wind').innerText = Math.round(latest.windSpeedMPH);
-    document.getElementById('v-gust').innerText = "GUST: " + Math.round(latest.windGustMPH || 0) + " MPH";
-    document.getElementById('v-hum').innerText = latest.humidity + "%";
-    document.getElementById('v-pressure').innerText = latest.pressureMB + " hPa";
-    document.getElementById('v-sol').innerText = latest.solradWM2 || 0;
-    document.getElementById('v-uv').innerText = "UV: " + (latest.uv || 0);
+    // Current weather is ALWAYS from the absolute last record in allData
+    const current = allData[allData.length - 1].ob;
+    
+    document.getElementById('v-temp').innerText = Math.round(current.tempF || 0) + "°";
+    document.getElementById('v-feels').innerText = "FEELS: " + Math.round(current.feelslikeF || current.tempF || 0) + "°";
+    document.getElementById('v-wind').innerText = Math.round(current.windSpeedMPH || 0);
+    document.getElementById('v-gust').innerText = "GUST: " + Math.round(current.windGustMPH || 0) + " MPH";
+    document.getElementById('v-hum').innerText = (current.humidity || 0) + "%";
+    document.getElementById('v-pressure').innerText = (current.pressureMB || 0) + " hPa";
+    document.getElementById('v-sol').innerText = current.solradWM2 || 0;
+    document.getElementById('v-uv').innerText = "UV: " + (current.uv || 0);
 
-    const tempVals = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp }));
-    const maxT = tempVals.reduce((p, c) => (p.v > c.v) ? p : c);
-    const minT = tempVals.reduce((p, c) => (p.v < c.v) ? p : c);
-    const maxW = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp })).reduce((p, c) => (p.v > c.v) ? p : c);
+    // Max/Min from the filtered subset
+    const temps = filteredData.map(d => ({ v: d.ob.tempF, t: d.timestamp }));
+    const maxT = temps.reduce((p, c) => (p.v > c.v) ? p : c);
+    const minT = temps.reduce((p, c) => (p.v < c.v) ? p : c);
+    
+    const windGusts = filteredData.map(d => ({ v: d.ob.windGustMPH || 0, t: d.timestamp }));
+    const maxW = windGusts.reduce((p, c) => (p.v > c.v) ? p : c);
 
     document.getElementById('v-temp-range').innerHTML = `MAX: ${Math.round(maxT.v)}° (${safeDate(maxT.t)})<br>MIN: ${Math.round(minT.v)}° (${safeDate(minT.t)})`;
     document.getElementById('v-wind-max').innerText = `PEAK: ${Math.round(maxW.v)} MPH (${safeDate(maxW.t)})`;
 
-    document.getElementById('summary-title').innerText = days === 1 ? "Today's Analysis" : `${days}-Day Analysis`;
-    buildSummary();
+    document.getElementById('summary-title').innerText = days === 1 ? "Today's Risk Analysis" : `${days}-Day Analysis`;
+    buildSummaryTable();
 }
 
-function buildSummary() {
-    const params = [{ n: 'Temperature', k: 'tempF', u: '°' }, { n: 'Wind Speed', k: 'windSpeedMPH', u: ' mph' }, { n: 'Humidity', k: 'humidity', u: '%' }];
-    document.getElementById('summary-body').innerHTML = params.map(p => {
-        const vals = filteredData.map(d => d.ob[p.k]).filter(v => v !== null);
+function buildSummaryTable() {
+    const metrics = [
+        { name: 'Temperature', key: 'tempF', unit: '°' },
+        { name: 'Wind Speed', key: 'windSpeedMPH', unit: ' mph' },
+        { name: 'Humidity', key: 'humidity', unit: '%' }
+    ];
+
+    document.getElementById('summary-body').innerHTML = metrics.map(m => {
+        const vals = filteredData.map(d => d.ob[m.key]).filter(v => v !== null && !isNaN(v));
+        if (!vals.length) return '';
         const high = Math.max(...vals), low = Math.min(...vals), avg = vals.reduce((a,b)=>a+b)/vals.length;
-        return `<tr><td>${p.n}</td><td>${Math.round(high)}${p.u}</td><td>${Math.round(low)}${p.u}</td><td>${Math.round(avg)}${p.u}</td></tr>`;
+        return `<tr><td>${m.name}</td><td>${Math.round(high)}${m.unit}</td><td>${Math.round(low)}${m.unit}</td><td>${Math.round(avg)}${m.unit}</td></tr>`;
     }).join('');
 }
 
 function openChart(type) {
     document.getElementById('overlay-chart').style.display = 'flex';
     const ctx = document.getElementById('main-canvas');
-    if(chartInstance) chartInstance.destroy();
+    if (chartInstance) chartInstance.destroy();
     
     const keyMap = { temp: 'tempF', wind: 'windSpeedMPH', humidity: 'humidity', solar: 'solradWM2' };
     
-    // For large datasets, we sample the data (show every 5th point) to keep the chart smooth
-    const chartData = filteredData
-        .filter((_, i) => i % (filteredData.length > 5000 ? 10 : 1) === 0) 
-        .map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] }));
-
     chartInstance = new Chart(ctx, {
         type: 'line',
-        data: { datasets: [{
-            label: type.toUpperCase(),
-            data: chartData,
-            borderColor: '#00d2ff', borderWidth: 2, fill: true, backgroundColor: 'rgba(0,210,255,0.05)', pointRadius: 0, tension: 0.1
-        }]},
+        data: {
+            datasets: [{
+                label: type.toUpperCase(),
+                data: filteredData.map(d => ({ x: d.timestamp * 1000, y: d.ob[keyMap[type]] })),
+                borderColor: '#00d2ff', borderWidth: 2, fill: true, backgroundColor: 'rgba(0,210,255,0.1)', pointRadius: 0, tension: 0.1
+            }]
+        },
         options: {
             responsive: true, maintainAspectRatio: false,
-            scales: { x: { type: 'time', time: { unit: 'day' }, grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }
+            scales: {
+                x: { type: 'time', time: { unit: 'day' }, grid: { display: false } },
+                y: { grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
         }
     });
 }
 
 function closeOverlay(id) { document.getElementById(id).style.display = 'none'; }
-function downloadCSV() { /* same as before */ }
+function downloadCSV() { /* Export Logic */ }
+
 init();
 </script>
 </body>

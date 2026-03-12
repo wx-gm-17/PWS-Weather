@@ -25,7 +25,7 @@ jobs:
         run: pip install requests
 
       - name: Run Harvest Script
-        run: python harvest.py
+        run: python test_api.py
 
       - name: Commit and Push Changes
         run: |

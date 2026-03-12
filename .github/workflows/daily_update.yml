@@ -3,35 +3,32 @@ name: Daily Weather Update
 on:
   schedule:
     - cron: '0 8 * * *'
-  workflow_dispatch: # This allows the manual "Run Workflow" button
+  workflow_dispatch:
 
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    # This gives the robot permission to actually write to your files
     permissions:
       contents: write
-      
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Already v4, which is good
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Upgraded to v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: pip install requests
 
-      - name: Run Harvest Script
-        run: python test_api.py
+      - name: Run Harvest
+        run: python harvest.py
 
-      - name: Commit and Push Changes
+      - name: Save Data
         run: |
           git config --global user.name "Weather Bot"
           git config --global user.email "bot@github.com"
           git add weather_history.json
-          # This line only saves if the file actually changed
-          git commit -m "Update weather history: $(date)" || echo "No changes to commit"
+          git commit -m "Update history: $(date)" || exit 0
           git push

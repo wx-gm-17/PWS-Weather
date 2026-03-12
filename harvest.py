@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 # Your Credentials
 CLIENT_ID = "uE7sqhcGr6Y3pXoM2o62g"
 CLIENT_SECRET = "xrOsFGHT9pNkCLCg6Cies6TXdvCIUMLy27dEJJO4"
-STATION_ID = "KCOARVAD722"
+# Xweather usually requires 'pws:' before the ID
+STATION_ID = "pws:KCOARVAD722" 
 
 end_date = datetime.now()
 start_date = end_date - timedelta(days=365)
@@ -15,7 +16,7 @@ print(f"🚀 Starting harvest for {STATION_ID}...")
 
 while current_date <= end_date:
     date_str = current_date.strftime("%Y-%m-%d")
-    # Using the primary archive endpoint
+    # Archive endpoint
     url = f"https://data.api.xweather.com/observations/archive/{STATION_ID}"
     params = {
         "client_id": CLIENT_ID, 
@@ -29,26 +30,30 @@ while current_date <= end_date:
         data = r.json()
         
         if data.get('success') and data.get('response'):
-            # Xweather response structure: response[0]['periods']
             obs = data['response'][0].get('periods', [])
             if obs:
                 all_history.extend(obs)
                 print(f"✅ {date_str}: Added {len(obs)} records")
             else:
-                print(f"⚠️ {date_str}: Success, but no records found for this day.")
-        else:
-            print(f"❌ {date_str}: API Error - {data.get('error', {}).get('description', 'Unknown')}")
-            
+                # If no records, let's try WITHOUT the 'pws:' prefix just for this day
+                print(f"⚠️ {date_str}: No records with pws: prefix, trying fallback...")
+                params_fallback = params.copy()
+                r_fb = requests.get(f"https://data.api.xweather.com/observations/archive/KCOARVAD722", params=params_fallback)
+                fb_data = r_fb.json()
+                if fb_data.get('success') and fb_data['response'][0].get('periods'):
+                    all_history.extend(fb_data['response'][0]['periods'])
+                    print(f"✅ {date_str}: Fallback worked!")
+
+        time.sleep(0.3)
     except Exception as e:
-        print(f"⚠️ Connection Error on {date_str}: {e}")
+        print(f"⚠️ Error on {date_str}: {e}")
         
     current_date += timedelta(days=1)
-    time.sleep(0.2) # Faster harvest
 
-# CRITICAL: Only save if we actually found data!
+# Save only if we actually found something
 if len(all_history) > 0:
     with open('weather_history.json', 'w') as f:
         json.dump(all_history, f, indent=2)
-    print(f"✨ Successfully saved {len(all_history)} records!")
+    print(f"✨ SUCCESS: Saved {len(all_history)} records to weather_history.json")
 else:
-    print("❌ HARVEST FAILED: No data was found. Check your Station ID or API permissions.")
+    print("❌ FATAL: No data found for any variations of the ID.")

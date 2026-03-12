@@ -1,47 +1,56 @@
-import requests, json, time
+import requests, json, time, os
 from datetime import datetime, timedelta
 
-# YOUR WORKING WU DETAILS
-STATION_ID = "KCOARVAD722"
-API_KEY = "0b649979d0b348b1a49979d0b318b138"
+# Your Xweather Developer Credentials
+CLIENT_ID = "uE7sqhcGr6Y3pXoM2o62g"
+CLIENT_SECRET = "xrOsFGHT9pNkCLCg6Cies6TXdvCIUMLy27dEJJO4"
+STATION_ID = "pws:KCOARVAD722" # Note the 'pws:' prefix
 
-# Date Range: 365 days
+# Let's start with 30 days to guarantee a fast, successful save
 end_date = datetime.now()
-start_date = end_date - timedelta(days=365)
+start_date = end_date - timedelta(days=30)
 current_date = start_date
 all_history = []
 
-print(f"🚀 Starting Weather Underground harvest for {STATION_ID}...")
+print(f"🚀 Starting Xweather harvest for {STATION_ID}...")
 
 while current_date <= end_date:
-    date_str = current_date.strftime("%Y%m%d")
+    date_str = current_date.strftime("%Y-%m-%d")
+    url = f"https://data.api.xweather.com/observations/archive/{STATION_ID}"
     
-    # Weather Underground Daily History Endpoint
-    url = f"https://api.weather.com/v2/pws/history/all?stationId={STATION_ID}&format=json&units=e&date={date_str}&apiKey={API_KEY}"
+    params = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "from": date_str,
+        "to": date_str,
+        "limit": 1000
+    }
     
     try:
-        r = requests.get(url)
-        if r.status_code == 200:
-            data = r.json()
-            if 'observations' in data:
-                obs = data['observations']
+        r = requests.get(url, params=params)
+        data = r.json()
+        
+        if data.get('success') and data.get('response'):
+            # Xweather nested structure: response[0]['periods']
+            obs = data['response'][0].get('periods', [])
+            if obs:
                 all_history.extend(obs)
                 print(f"✅ {date_str}: Added {len(obs)} records")
-        elif r.status_code == 204:
-            print(f"⚪ {date_str}: No data for this date.")
+            else:
+                print(f"⚪ {date_str}: No data found for this day.")
         else:
-            print(f"❌ {date_str}: Error {r.status_code}")
+            print(f"❌ {date_str}: API Error - {data.get('error', {}).get('description', 'Unknown')}")
             
     except Exception as e:
         print(f"⚠️ Connection error on {date_str}: {e}")
         
     current_date += timedelta(days=1)
-    # WU limit is 30/min, so 2 seconds is perfect
-    time.sleep(2.0)
+    time.sleep(0.1) # Xweather is fast!
 
+# The "Safety Net" Save
 if len(all_history) > 0:
     with open('weather_history.json', 'w') as f:
         json.dump(all_history, f, indent=2)
-    print(f"✨ SUCCESS: Saved {len(all_history)} records to weather_history.json")
+    print(f"✨ SUCCESS: {len(all_history)} Xweather records saved!")
 else:
-    print("❌ FATAL: Weather Underground returned no data. Check if the API Key is active.")
+    print("❌ FATAL: No data found. Try removing 'pws:' from the ID if this continues.")

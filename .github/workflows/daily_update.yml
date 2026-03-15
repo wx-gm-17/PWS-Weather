@@ -27,7 +27,7 @@ jobs:
           pip install requests
 
       - name: Run data harvest script
-        run: python fetch_weather.py
+        run: python harvest.py
 
       - name: Commit and push changes
         run: |

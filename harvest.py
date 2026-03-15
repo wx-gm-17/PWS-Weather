@@ -39,9 +39,8 @@ while current_date <= end_date:
         
         if data.get('success') and data.get('response'):
             obs = data['response'][0].get('periods', [])
-if obs:
-                # Wraps the archive data to match the 'ob' structure your JavaScript expects
-                all_history.extend([{"timestamp": p.get("timestamp"), "ob": p} for p in obs])
+            if obs:
+                all_history.extend(obs)
                 print(f"✅ {date_str}: Added {len(obs)} records")
             else:
                 print(f"⚪ {date_str}: No records found.")
